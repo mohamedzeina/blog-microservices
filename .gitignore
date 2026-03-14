@@ -38,6 +38,9 @@ Thumbs.db
 # Testing
 coverage/
 
+# Claude memory
+.claude/
+
 # Misc
 .npm
 .eslintcache
