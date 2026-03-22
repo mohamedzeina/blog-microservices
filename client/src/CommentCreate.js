@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import axios from 'axios';
-import { use } from 'react';
 
 const CommentCreate = ({ postId }) => {
 	const [comment, setComment] = useState('');
@@ -23,6 +22,7 @@ const CommentCreate = ({ postId }) => {
 					<label>New Comment</label>
 					<input
 						className="form-control"
+						value={comment}
 						onChange={(e) => setComment(e.target.value)}
 					/>
 				</div>
