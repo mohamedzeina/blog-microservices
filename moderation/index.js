@@ -1,4 +1,5 @@
 const express = require('express');
+const axios = require('axios');
 const bodyParser = require('body-parser');
 const cors = require('cors');
 
@@ -10,9 +11,8 @@ app.post('/events', async (req, res) => {
 	const { type, data } = req.body;
 	if (type === 'CommentCreated') {
 		const status = data.content.includes('orange') ? 'rejected' : 'approved';
-		await axios.post(
-			'http://localhost:4005/events',
-			{
+		await axios
+			.post('http://localhost:4005/events', {
 				type: 'CommentModerated',
 				data: {
 					id: data.id,
@@ -20,10 +20,10 @@ app.post('/events', async (req, res) => {
 					postId: data.postId,
 					status,
 				},
-			}.catch((err) => {
+			})
+			.catch((err) => {
 				console.log(err.message);
-			}),
-		);
+			});
 
 		res.send({});
 	}
