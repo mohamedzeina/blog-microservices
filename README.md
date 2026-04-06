@@ -1,6 +1,6 @@
 # Blog Microservices
 
-A full-stack blog platform built with Node.js, React, and an event-driven microservices architecture. Features a custom-built event bus for inter-service communication, a query service for optimized reads, and a moderation service for comment filtering.
+A full-stack blog platform built with Node.js, React, and an event-driven microservices architecture. Features a custom-built event bus for inter-service communication, a query service for optimized reads, a moderation service for comment filtering, and a full Kubernetes deployment with Skaffold for local development.
 
 ---
 
@@ -10,8 +10,10 @@ A full-stack blog platform built with Node.js, React, and an event-driven micros
 - **Comment on posts** — add comments to any post with per-post comment threads
 - **Event-driven architecture** — services communicate asynchronously via a custom event bus
 - **Query service** — denormalized read model aggregates posts and comments for fast client queries
-- **Comment moderation** — comments are filtered automatically; posts containing "orange" are rejected
+- **Comment moderation** — comments are filtered automatically; comments containing "orange" are rejected
 - **Event replay** — query service replays all past events on startup to rebuild its state
+- **Kubernetes deployment** — all services run as pods with ClusterIP services and an Nginx Ingress
+- **Skaffold** — automatic image rebuilds and pod syncing on file changes during local development
 
 ---
 
@@ -32,7 +34,7 @@ The app is split into six independent services, each with its own Express server
 
 ```
 PostCreate (React)
-  └─▶ POST /posts (Posts :4000)
+  └─▶ POST /posts/create (Posts :4000)
         └─▶ PostCreated ──▶ Event Bus :4005
                                 ├──▶ Posts :4000
                                 ├──▶ Comments :4001
@@ -49,6 +51,17 @@ CommentCreate (React)
                                                                                     └─▶ CommentUpdated ──▶ Event Bus :4005
                                                                                                               └──▶ Query :4002  (updates status to approved/rejected)
 ```
+
+### Kubernetes Ingress Routing
+
+All external traffic hits the Nginx Ingress at `http://posts.com` and is routed to the appropriate ClusterIP service:
+
+| Path | Service |
+|---|---|
+| `/posts/create` | posts-clusterip-srv :4000 |
+| `/posts` | query-clusterip-srv :4002 |
+| `/posts/:id/comments` | comments-clusterip-srv :4001 |
+| `/*` | client-clusterip-srv :3000 |
 
 ---
 
@@ -68,6 +81,14 @@ CommentCreate (React)
 | React 18 | UI library |
 | Axios | HTTP client |
 
+### Infrastructure
+| Technology | Purpose |
+|---|---|
+| Docker | Containerise each service |
+| Kubernetes | Orchestrate pods, deployments, and services |
+| Nginx Ingress | Route external traffic to services |
+| Skaffold | Local development workflow — rebuild images and sync files on change |
+
 ---
 
 ## Project Structure
@@ -75,23 +96,40 @@ CommentCreate (React)
 ```
 blog-microservices/
 ├── posts/
-│   └── index.js              # Posts service (port 4000)
+│   ├── index.js              # Posts service (port 4000)
+│   └── Dockerfile
 ├── comments/
-│   └── index.js              # Comments service (port 4001)
+│   ├── index.js              # Comments service (port 4001)
+│   └── Dockerfile
 ├── query/
-│   └── index.js              # Query service (port 4002)
+│   ├── index.js              # Query service (port 4002)
+│   └── Dockerfile
 ├── moderation/
-│   └── index.js              # Moderation service (port 4003)
+│   ├── index.js              # Moderation service (port 4003)
+│   └── Dockerfile
 ├── event-bus/
-│   └── index.js              # Event bus (port 4005)
-└── client/                   # React frontend (port 3000)
-    └── src/
-        ├── index.js          # React entry point
-        ├── App.js            # Root component
-        ├── PostCreate.js     # Form for creating posts
-        ├── PostList.js       # Displays all posts with comments
-        ├── CommentCreate.js  # Form for creating comments
-        └── CommentList.js    # Displays comments with moderation status
+│   ├── index.js              # Event bus (port 4005)
+│   └── Dockerfile
+├── client/                   # React frontend (port 3000)
+│   ├── Dockerfile
+│   └── src/
+│       ├── index.js          # React entry point
+│       ├── App.js            # Root component
+│       ├── PostCreate.js     # Form for creating posts
+│       ├── PostList.js       # Displays all posts with comments
+│       ├── CommentCreate.js  # Form for creating comments
+│       └── CommentList.js    # Displays comments with moderation status
+├── infra/
+│   └── k8s/
+│       ├── posts-depl.yaml         # Posts deployment + ClusterIP service
+│       ├── comments-depl.yaml      # Comments deployment + ClusterIP service
+│       ├── query-depl.yaml         # Query deployment + ClusterIP service
+│       ├── moderation-depl.yaml    # Moderation deployment + ClusterIP service
+│       ├── event-bus-depl.yaml     # Event bus deployment + ClusterIP service
+│       ├── client-depl.yaml        # Client deployment + ClusterIP service
+│       ├── posts-srv.yaml          # Posts NodePort service
+│       └── ingress-srv.yaml        # Nginx Ingress routing rules
+└── skaffold.yaml                   # Skaffold build and sync config
 ```
 
 ---
@@ -101,6 +139,10 @@ blog-microservices/
 ### Prerequisites
 
 - Node.js 18+
+- Docker Desktop with Kubernetes enabled
+- [Skaffold](https://skaffold.dev/docs/install/)
+- [ingress-nginx](https://kubernetes.github.io/ingress-nginx/deploy/) installed in your cluster
+- `posts.com` mapped to `127.0.0.1` in `/etc/hosts`
 
 ### 1. Clone the repository
 
@@ -109,29 +151,23 @@ git clone https://github.com/mohamedzeina/blog-microservices.git
 cd blog-microservices
 ```
 
-### 2. Install dependencies for each service
+### 2. Add hosts entry
 
-```bash
-cd posts && npm install && cd ..
-cd comments && npm install && cd ..
-cd query && npm install && cd ..
-cd moderation && npm install && cd ..
-cd event-bus && npm install && cd ..
-cd client && npm install && cd ..
+Add the following line to `/etc/hosts`:
+
+```
+127.0.0.1 posts.com
 ```
 
-### 3. Start each service in a separate terminal
+### 3. Start with Skaffold
 
 ```bash
-cd posts && npm start       # http://localhost:4000
-cd comments && npm start    # http://localhost:4001
-cd query && npm start       # http://localhost:4002
-cd moderation && npm start  # http://localhost:4003
-cd event-bus && npm start   # http://localhost:4005
-cd client && npm start      # http://localhost:3000
+skaffold dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000).
+Skaffold will build all Docker images, apply the Kubernetes manifests, and sync file changes into running pods automatically.
+
+Open [http://posts.com](http://posts.com).
 
 ---
 
@@ -140,8 +176,7 @@ Open [http://localhost:3000](http://localhost:3000).
 ### Posts Service (port 4000)
 | Method | Endpoint | Description |
 |---|---|---|
-| `GET` | `/posts` | Return all posts |
-| `POST` | `/posts` | Create a new post |
+| `POST` | `/posts/create` | Create a new post |
 | `POST` | `/events` | Receive events from the event bus |
 
 ### Comments Service (port 4001)
